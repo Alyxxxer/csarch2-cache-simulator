@@ -1,0 +1,13 @@
+{
+  "name": "csarch2-machine8-cache-simulator",
+  "version": "1.0.0",
+  "description": "CSARCH2 Case Study 1 - Machine 8: Direct Mapped vs Fully Associative (MRU) cache simulator, non-load-through read policy",
+  "type": "module",
+  "scripts": {
+    "test:dm": "node src/test.js",
+    "serve": "npx --yes serve ."
+  },
+  "keywords": ["cache", "direct-mapped", "fully-associative", "mru", "csarch2"],
+  "license": "MIT",
+  "private": true
+}
