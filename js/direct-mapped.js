@@ -3,8 +3,7 @@
 // CSARCH2 Case Study 1 — Machine 8 (Direct Mapped vs Fully Associative + MRU)
 //
 // This module implements ONLY the Direct Mapped engine.
-// Read policy: NON-LOAD-THROUGH (the block is fully loaded into the cache
-// first, and only then is the requested word read out of the cache).
+// Read policy: parameterized — 'non-load-through' OR 'load-through'.
 //
 // Public API (everything the GUI / stats / logging modules need):
 //   isPowerOfTwo(n)
@@ -19,28 +18,35 @@
 export const MAIN_MEMORY_BLOCKS = 1024;
 
 /**
- * Timing model (in cycles). These are ASSUMPTIONS — confirm the numbers your
- * instructor wants and document them in the README.
+ * Timing model (in cycles/ns). These match the worked example from lecture
+ * (cacheAccessTime = 1ns, memoryAccessTime = 10ns/word) — confirm against
+ * your own instructor's numbers if they differ, and document in the README.
  *
  *   cacheAccessTime (Tc) : time to read/write one word in the cache
  *   memoryAccessTime (Tm): time to read one word from main memory
  *   countMissDetection   : whether the initial failed tag check costs 1 Tc
  *
- * NON-LOAD-THROUGH formulas used here:
- *   Hit  time  = Tc
- *   Miss time  = Tc (miss detection) + blockSize * Tm (load whole block) + Tc (read word)
+ * NON-LOAD-THROUGH:
+ *   Hit  time = Tc
+ *   Miss time = Tc (miss detection) + blockSize * Tm (load whole block) + Tc (read word from cache)
+ *   Checked against the lecture example: blockSize=2, Tc=1, Tm=10
+ *     -> 1 + 2*10 + 1 = 22ns. Matches.
  *
- * (Load-through, for contrast, would be Tc + Tm + Tc + (blockSize-1)*Tm,
- *  i.e. the CPU gets its word as soon as it arrives. We do NOT use it here.)
+ * LOAD-THROUGH:
+ *   Hit  time = Tc (same as non-load-through — a hit never touches main memory)
+ *   Miss time = Tc (miss detection) + Tm (fetch just the requested word) + Tc (forward word to CPU)
+ *   The remaining (blockSize - 1) words keep loading into the cache in the
+ *   background afterward, but that does NOT block the CPU, so it is left out
+ *   of the miss penalty on purpose — that's the entire benefit of the policy.
  */
 export const DEFAULT_TIMING = {
   cacheAccessTime: 1,
   memoryAccessTime: 10,
   countMissDetection: true,
-  loadThroughModel:'word-forwarded',
 };
 
 export const READ_POLICIES = ['non-load-through', 'load-through'];
+
 /** A cache size / block size must be a power of two. */
 export function isPowerOfTwo(n) {
   return Number.isInteger(n) && n > 0 && (n & (n - 1)) === 0;
@@ -147,16 +153,24 @@ export class DirectMappedCache {
     };
   }
 
-missPenalty(policy = this.readPolicy) {
-  const { cacheAccessTime: Tc, memoryAccessTime: Tm,
-          countMissDetection, loadThroughModel } = this.timing;
-  const detect = countMissDetection ? Tc : 0;
-  if (policy === 'load-through') {
-    return loadThroughModel === 'first-word' ? detect + Tm
-                                             : detect + this.blockSize * Tm;
+  /** Cost of a single miss — formula depends on the given/instance readPolicy. */
+  missPenalty(policy = this.readPolicy) {
+    const { cacheAccessTime: Tc, memoryAccessTime: Tm, countMissDetection } = this.timing;
+    const detect = countMissDetection ? Tc : 0;
+
+    if (policy === 'load-through') {
+      // CPU waits for miss detection + the ONE requested word, then the word
+      // is forwarded straight to the CPU. The other (blockSize-1) words keep
+      // streaming into the cache line afterward, off the CPU's critical path.
+      // (blockSize must NOT multiply Tm here — that would erase the entire
+      // benefit of load-through over non-load-through.)
+      return detect + Tm + Tc;
+    }
+
+    // non-load-through: CPU waits for the WHOLE block to land in the cache,
+    // then reads its word out of the cache at normal cache speed.
+    return detect + this.blockSize * Tm + Tc;
   }
-  return detect + this.blockSize * Tm + Tc;
-}
 
   /**
    * Performs one memory access on the given main-memory BLOCK address.
@@ -194,7 +208,9 @@ missPenalty(policy = this.readPolicy) {
       } else {
         missType = 'compulsory';
       }
-      // Non-load-through: the ENTIRE block is loaded before the CPU is served.
+      // Cache line ends up holding the full block either way — read policy
+      // only changes HOW LONG the CPU waits (see missPenalty()), not what
+      // ends up stored in the line.
       line.valid = true;
       line.tag = tag;
       line.blockAddress = blockAddress;
@@ -254,7 +270,28 @@ missPenalty(policy = this.readPolicy) {
   getStats() {
     const hitRate = this.totalAccesses ? this.hits / this.totalAccesses : 0;
     const missRate = this.totalAccesses ? this.misses / this.totalAccesses : 0;
-    const { cacheAccessTime: Tc } = this.timing;
+    const { cacheAccessTime: Tc, memoryAccessTime: Tm, countMissDetection } = this.timing;
+    const detect = countMissDetection ? Tc : 0;
+
+    // "Total Access Time" per the course's own convention — confirmed
+    // against three worked examples (Direct Mapped 213ns, FA+MRU 192ns,
+    // Block-Set-Assoc 171ns, all non-load-through): it charges hits and
+    // misses at WORD granularity, not block granularity. This is a
+    // DIFFERENT accounting than AMAT below — the two stats are defined
+    // independently in the course material, and total is NOT expected to
+    // equal avg * count (verified: 16.75ns * 12 = 201, but the slide's own
+    // total is 213ns — the two formulas simply don't reconcile, by design
+    // or by a slide inconsistency we can't resolve without the instructor).
+    //   Non-load-through: H*blockSize*Tc + M*(blockSize*(Tm+Tc) + detect)
+    //   Load-through: no word-scaled worked example was given for this
+    //   policy, so misses use the unscaled missPenalty() (only the ONE
+    //   requested word sits on the CPU's critical path either way) —
+    //   flag this assumption to your instructor if it matters for grading.
+    const totalAccessTime =
+      this.readPolicy === 'load-through'
+        ? this.hits * this.blockSize * Tc + this.misses * this.missPenalty()
+        : this.hits * this.blockSize * Tc + this.misses * (this.blockSize * (Tm + Tc) + detect);
+
     return {
       totalAccesses: this.totalAccesses,
       hits: this.hits,
@@ -265,7 +302,7 @@ missPenalty(policy = this.readPolicy) {
       // textbook formula: h*Tc + (1-h)*missPenalty
       avgAccessTime: this.totalAccesses ? this.totalAccessTime / this.totalAccesses : 0,
       formulaAvgAccessTime: hitRate * Tc + missRate * this.missPenalty(),
-      totalAccessTime: this.totalAccessTime,
+      totalAccessTime,
     };
   }
 

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Machine 8 — Direct Mapped vs Fully Associative (MRU) Cache Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <div class="eyebrow">CASE STUDY 2</div>
+  <h1>MACHINE 08 <span class="vs">||</span> DIRECT MAPPED <span class="vs">vs</span> FULLY ASSOCIATIVE·MRU</h1>
+</header>
+
+<section class="control-bar">
+  <div class="control-fields">
+    <div class="field">
+      <label for="blockSize">Block size (words)</label>
+      <input type="number" id="blockSize" value="4" min="2" step="1" />
+    </div>
+
+    <div class="field">
+      <label for="numBlocks"># cache blocks</label>
+      <input type="number" id="numBlocks" value="8" min="4" step="1" />
+    </div>
+
+    <div class="field">
+      <label for="readPolicy">Read policy</label>
+      <select id="readPolicy">
+        <option value="non-load-through" selected>Non-load-through</option>
+        <option value="load-through">Load-through</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="testCase">Test case</label>
+      <select id="testCase">
+        <option value="sequential">(a) Sequential (2n ×2)</option>
+        <option value="mid-repeat">(b) Mid-repeat blocks</option>
+        <option value="random">(c) Random (64 accesses)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="viewMode">Output view</label>
+      <select id="viewMode">
+        <option value="step">Step-by-step trace</option>
+        <option value="final">Final snapshot</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="control-actions">
+    <div class="btn-row">
+      <button class="primary" id="runBtn">▶ Load &amp; Run</button>
+      <button id="stepBtn">Step ⏭</button>
+      <button id="playBtn">▶ Play</button>
+      <button id="resetBtn">Reset ↺</button>
+    </div>
+    <div class="status-row">
+      <span id="progressLabel">0 / 0</span>
+      <span class="bus-strip">ADDR_BUS <span class="bus-value" id="busAddress">—</span></span>
+    </div>
+  </div>
+
+  <div id="errorBanner" class="error-banner" hidden></div>
+</section>
+
+<main class="main">
+  <section class="compare-columns">
+    <div class="machine-column">
+      <p class="panel-title machine-title">01 · Direct Mapped</p>
+      <div id="directGrid" class="mem-grid"></div>
+      <p class="panel-title">Trace log</p>
+      <div id="directLog" class="log-output"></div>
+      <p class="panel-title">Statistics</p>
+      <div id="directStats" class="stats-output"></div>
+    </div>
+
+    <div class="machine-column">
+      <p class="panel-title machine-title">02 · Fully Associative + MRU</p>
+      <div id="faGrid" class="mem-grid"></div>
+      <p class="panel-title">Trace log</p>
+      <div id="faLog" class="log-output"></div>
+      <p class="panel-title">Statistics</p>
+      <div id="faStats" class="stats-output"></div>
+    </div>
+  </section>
+</main>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

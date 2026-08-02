@@ -3,8 +3,15 @@
 // CSARCH2 Case Study 1 — Machine 8 (Direct Mapped vs Fully Associative + MRU)
 //
 // This module implements ONLY the Fully Associative + MRU engine.
-// Read policy: NON-LOAD-THROUGH
-// Replacement policy: MRU (Most Recently Used)
+// Read policy: parameterized — 'non-load-through' OR 'load-through'.
+// Replacement policy: MRU — on a capacity miss, evict the MOST recently
+// used line (not LRU). Verified against the lecture's worked example
+// (sequence 1,7,5,0,2,1,5,6,5,2,2,0 over 4 blocks): this engine's hit/miss
+// pattern and eviction targets match the slide on 11 of 12 accesses; the
+// one mismatch (slide shows a "hit" on the 9th access) contradicts the
+// slide's OWN stated hit rate (4/12) — only a miss on that access adds up
+// to 4 hits total, so that row is treated as a slide/transcription typo,
+// not a bug in this engine.
 
 import { MAIN_MEMORY_BLOCKS, DEFAULT_TIMING, READ_POLICIES, isPowerOfTwo } from './direct-mapped.js';
 
@@ -102,17 +109,20 @@ export class FullyAssociativeMRUCache {
     this.steps = [];
   }
 
-  /** Cost of a single miss under non-load-through. */
-missPenalty(policy = this.readPolicy) {
-  const { cacheAccessTime: Tc, memoryAccessTime: Tm,
-          countMissDetection, loadThroughModel } = this.timing;
-  const detect = countMissDetection ? Tc : 0;
-  if (policy === 'load-through') {
-    return loadThroughModel === 'first-word' ? detect + Tm
-                                             : detect + this.blockSize * Tm;
+  /** Cost of a single miss — formula depends on the given/instance readPolicy. */
+  missPenalty(policy = this.readPolicy) {
+    const { cacheAccessTime: Tc, memoryAccessTime: Tm, countMissDetection } = this.timing;
+    const detect = countMissDetection ? Tc : 0;
+
+    if (policy === 'load-through') {
+      // Same reasoning as direct-mapped.js: the CPU only waits on miss
+      // detection + the ONE requested word; the rest of the block streams
+      // in afterward without blocking the CPU.
+      return detect + Tm + Tc;
+    }
+
+    return detect + this.blockSize * Tm + Tc;
   }
-  return detect + this.blockSize * Tm + Tc;
-}
 
   /**
    * Performs one memory access on the given main-memory BLOCK address.
@@ -129,9 +139,9 @@ missPenalty(policy = this.readPolicy) {
     }
 
     this.totalAccesses += 1;
-    
+
     // In Fully Associative, tag is simply the block address itself
-    const tag = blockAddress; 
+    const tag = blockAddress;
     let hitIndex = this.lines.findIndex((line) => line.valid && line.tag === tag);
     const hit = hitIndex !== -1;
 
@@ -180,7 +190,7 @@ missPenalty(policy = this.readPolicy) {
       hit,
       missType,                       // null on hit, 'compulsory' or 'capacity' on miss
       evictedBlock,                   // null when nothing was evicted
-      mruIndex: this.mruIndex,         // useful for Venice's visual UI indicator
+      mruIndex: this.mruIndex,         // useful for the visual UI indicator
       accessTimeCycles,
       cacheStateAfter: this.snapshot(),
     };
@@ -218,7 +228,18 @@ missPenalty(policy = this.readPolicy) {
   getStats() {
     const hitRate = this.totalAccesses ? this.hits / this.totalAccesses : 0;
     const missRate = this.totalAccesses ? this.misses / this.totalAccesses : 0;
-    const { cacheAccessTime: Tc } = this.timing;
+    const { cacheAccessTime: Tc, memoryAccessTime: Tm, countMissDetection } = this.timing;
+    const detect = countMissDetection ? Tc : 0;
+
+    // Word-scaled Total Access Time, same convention as direct-mapped.js —
+    // verified against the FA+MRU lecture example (4 hits, 8 misses,
+    // blockSize=2, Tc=1ns, Tm=10ns): 4*2*1 + 8*(2*11 + 1) = 8 + 184 = 192ns,
+    // matching the slide exactly.
+    const totalAccessTime =
+      this.readPolicy === 'load-through'
+        ? this.hits * this.blockSize * Tc + this.misses * this.missPenalty()
+        : this.hits * this.blockSize * Tc + this.misses * (this.blockSize * (Tm + Tc) + detect);
+
     return {
       totalAccesses: this.totalAccesses,
       hits: this.hits,
@@ -227,7 +248,7 @@ missPenalty(policy = this.readPolicy) {
       missRate,
       avgAccessTime: this.totalAccesses ? this.totalAccessTime / this.totalAccesses : 0,
       formulaAvgAccessTime: hitRate * Tc + missRate * this.missPenalty(),
-      totalAccessTime: this.totalAccessTime,
+      totalAccessTime,
     };
   }
 
