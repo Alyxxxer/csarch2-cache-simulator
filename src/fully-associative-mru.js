@@ -35,8 +35,8 @@ export function validateConfig(config = {}) {
   if (isPowerOfTwo(numCacheBlocks) && numCacheBlocks > mainMemoryBlocks) {
     errors.push('numCacheBlocks cannot exceed the number of main memory blocks.');
   }
-  if (readPolicy !== 'non-load-through') {
-    errors.push('This build only implements the non-load-through read policy.');
+  if (!READ_POLICIES.includes(readPolicy)) {
+    errors.push(`readPolicy must be one of: ${READ_POLICIES.join(', ')}.`);
   }
 
   return errors;
@@ -76,7 +76,6 @@ export class FullyAssociativeMRUCache {
     this.blockSize = config.blockSize;
     this.numCacheBlocks = config.numCacheBlocks;
     this.mainMemoryBlocks = config.mainMemoryBlocks ?? MAIN_MEMORY_BLOCKS;
-    this.readPolicy = 'non-load-through';
     this.mappingType = 'fully-associative-mru';
     this.timing = { ...DEFAULT_TIMING, ...(config.timing || {}) };
     this.layout = addressLayout(this);
@@ -103,10 +102,16 @@ export class FullyAssociativeMRUCache {
   }
 
   /** Cost of a single miss under non-load-through. */
-  missPenalty() {
-    const { cacheAccessTime: Tc, memoryAccessTime: Tm, countMissDetection } = this.timing;
-    return (countMissDetection ? Tc : 0) + this.blockSize * Tm + Tc;
+missPenalty(policy = this.readPolicy) {
+  const { cacheAccessTime: Tc, memoryAccessTime: Tm,
+          countMissDetection, loadThroughModel } = this.timing;
+  const detect = countMissDetection ? Tc : 0;
+  if (policy === 'load-through') {
+    return loadThroughModel === 'first-word' ? detect + Tm
+                                             : detect + this.blockSize * Tm;
   }
+  return detect + this.blockSize * Tm + Tc;
+}
 
   /**
    * Performs one memory access on the given main-memory BLOCK address.

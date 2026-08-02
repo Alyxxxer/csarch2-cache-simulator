@@ -37,8 +37,10 @@ export const DEFAULT_TIMING = {
   cacheAccessTime: 1,
   memoryAccessTime: 10,
   countMissDetection: true,
+  loadThroughModel:'word-forwarded',
 };
 
+export const READ_POLICIES = ['non-load-through', 'load-through'];
 /** A cache size / block size must be a power of two. */
 export function isPowerOfTwo(n) {
   return Number.isInteger(n) && n > 0 && (n & (n - 1)) === 0;
@@ -70,8 +72,8 @@ export function validateConfig(config = {}) {
   if (isPowerOfTwo(numCacheBlocks) && numCacheBlocks > mainMemoryBlocks) {
     errors.push('numCacheBlocks cannot exceed the number of main memory blocks.');
   }
-  if (readPolicy !== 'non-load-through') {
-    errors.push('This build only implements the non-load-through read policy.');
+  if (!READ_POLICIES.includes(readPolicy)) {
+    errors.push(`readPolicy must be one of: ${READ_POLICIES.join(', ')}.`);
   }
 
   return errors;
@@ -111,7 +113,6 @@ export class DirectMappedCache {
     this.blockSize = config.blockSize;
     this.numCacheBlocks = config.numCacheBlocks;
     this.mainMemoryBlocks = config.mainMemoryBlocks ?? MAIN_MEMORY_BLOCKS;
-    this.readPolicy = 'non-load-through';
     this.mappingType = 'direct';
     this.timing = { ...DEFAULT_TIMING, ...(config.timing || {}) };
     this.layout = addressLayout(this);
@@ -145,11 +146,16 @@ export class DirectMappedCache {
     };
   }
 
-  /** Cost of a single miss under non-load-through. */
-  missPenalty() {
-    const { cacheAccessTime: Tc, memoryAccessTime: Tm, countMissDetection } = this.timing;
-    return (countMissDetection ? Tc : 0) + this.blockSize * Tm + Tc;
+missPenalty(policy = this.readPolicy) {
+  const { cacheAccessTime: Tc, memoryAccessTime: Tm,
+          countMissDetection, loadThroughModel } = this.timing;
+  const detect = countMissDetection ? Tc : 0;
+  if (policy === 'load-through') {
+    return loadThroughModel === 'first-word' ? detect + Tm
+                                             : detect + this.blockSize * Tm;
   }
+  return detect + this.blockSize * Tm + Tc;
+}
 
   /**
    * Performs one memory access on the given main-memory BLOCK address.
