@@ -6,9 +6,9 @@
 // Read policy: NON-LOAD-THROUGH
 // Replacement policy: MRU (Most Recently Used)
 
-import { MAIN_MEMORY_BLOCKS, DEFAULT_TIMING, isPowerOfTwo } from './direct-mapped.js';
+import { MAIN_MEMORY_BLOCKS, DEFAULT_TIMING, READ_POLICIES, isPowerOfTwo } from './direct-mapped.js';
 
-export { MAIN_MEMORY_BLOCKS, DEFAULT_TIMING, isPowerOfTwo };
+export { MAIN_MEMORY_BLOCKS, DEFAULT_TIMING, READ_POLICIES, isPowerOfTwo };
 
 /**
  * Validates a config object against the case study specifications.
@@ -76,6 +76,7 @@ export class FullyAssociativeMRUCache {
     this.blockSize = config.blockSize;
     this.numCacheBlocks = config.numCacheBlocks;
     this.mainMemoryBlocks = config.mainMemoryBlocks ?? MAIN_MEMORY_BLOCKS;
+    this.readPolicy = config.readPolicy ?? 'non-load-through';
     this.mappingType = 'fully-associative-mru';
     this.timing = { ...DEFAULT_TIMING, ...(config.timing || {}) };
     this.layout = addressLayout(this);

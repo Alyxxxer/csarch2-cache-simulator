@@ -113,6 +113,7 @@ export class DirectMappedCache {
     this.blockSize = config.blockSize;
     this.numCacheBlocks = config.numCacheBlocks;
     this.mainMemoryBlocks = config.mainMemoryBlocks ?? MAIN_MEMORY_BLOCKS;
+    this.readPolicy = config.readPolicy ?? 'non-load-through';
     this.mappingType = 'direct';
     this.timing = { ...DEFAULT_TIMING, ...(config.timing || {}) };
     this.layout = addressLayout(this);
