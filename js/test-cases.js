@@ -19,9 +19,11 @@ export function generateSequential(n) {
 export function generateMidRepeat(n) {
   const first = Array.from({ length: n }, (_, i) => i);
   const middle = Array.from({ length: 2 * n }, (_, i) => i);
-  const reversed = [...middle].reverse();
 
-  return [...first, ...middle, ...middle, ...reversed, ...reversed];
+  const reversedFirst = [...first].reverse();
+  const reversedMiddle = [...middle].reverse();
+
+  return [...first, ...middle, ...middle, ...reversedFirst, ...reversedMiddle, ...reversedMiddle];
 }
 
 /** (c) Random: 64 accesses, block indices uniformly random in [0, mainMemoryBlocks). */

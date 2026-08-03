@@ -1,8 +1,10 @@
-import { DirectMappedCache, validateConfig as validateDirect, formatLogLine as formatDirectLog }
+import { DirectMappedCache, validateConfig as validateDirect }
   from './direct-mapped.js';
-import { FullyAssociativeMRUCache, validateConfig as validateFA, formatLogLine as formatFALog }
+import { FullyAssociativeMRUCache, validateConfig as validateFA}
   from './fully-associative-mru.js';
 import { TEST_CASES } from './test-cases.js';
+import {createStats, updateStats, formatRunningLog } 
+  from './stats-logger.js';
 
 function instantiateEngine(EngineClass, validateFn, config) {
   if (validateFn(config).length === 0) {
@@ -51,6 +53,9 @@ let fa = null;    // FullyAssociativeMRUCache instance
 let sequence = [];
 let cursor = -1;    // -1 = nothing stepped yet
 let playTimer = null;
+let directRunningStats = createStats();
+let faRunningStats = createStats();
+
 
 function readConfig() {
   return {
@@ -136,6 +141,9 @@ function runSequence() {
   direct = instantiateEngine(DirectMappedCache, validateDirect, config);
   fa = instantiateEngine(FullyAssociativeMRUCache, validateFA, config);
 
+  directRunningStats = createStats();
+  faRunningStats = createStats();
+
   const n = config.numCacheBlocks;
   sequence = TEST_CASES[els.testCase.value].generate(n);
   cursor = -1;
@@ -156,11 +164,20 @@ function runSequence() {
     renderGrid(els.directGrid, directResult.finalSnapshot, { markerMode: 'direct' });
     renderGrid(els.faGrid, faResult.finalSnapshot, { markerMode: 'fa' });
 
-    directResult.steps.forEach((s) => (els.directLog.textContent += formatDirectLog(s) + '\n'));
-    faResult.steps.forEach((s) => (els.faLog.textContent += formatFALog(s) + '\n'));
+    directRunningStats = createStats();
+    faRunningStats = createStats();
 
-    renderStats(els.directStats, directResult.stats);
-    renderStats(els.faStats, faResult.stats);
+    directResult.steps.forEach((step) => {updateStats(directRunningStats, step);
+      els.directLog.textContent += formatRunningLog(step, directRunningStats) + '\n';
+    });
+
+    faResult.steps.forEach((step) => {updateStats(faRunningStats, step);
+      els.faLog.textContent += formatRunningLog(step, faRunningStats) + '\n';
+    });
+
+    renderStats(els.directStats, directRunningStats);
+
+    renderStats(els.faStats, faRunningStats);
 
     els.progress.textContent = `${sequence.length} / ${sequence.length} (final snapshot)`;
   }
@@ -191,13 +208,18 @@ function stepForward() {
     markerMode: 'fa',
   });
 
-  els.directLog.textContent += formatDirectLog(dStep) + '\n';
-  els.faLog.textContent += formatFALog(fStep) + '\n';
+  updateStats(directRunningStats, dStep);
+  updateStats(faRunningStats, fStep);
+
+  els.directLog.textContent += formatRunningLog(dStep, directRunningStats) + '\n';
+  els.faLog.textContent += formatRunningLog(fStep, faRunningStats) + '\n';
+
+
   els.directLog.scrollTop = els.directLog.scrollHeight;
   els.faLog.scrollTop = els.faLog.scrollHeight;
 
-  renderStats(els.directStats, direct.getStats());
-  renderStats(els.faStats, fa.getStats());
+  renderStats(els.directStats, directRunningStats);
+  renderStats(els.faStats, faRunningStats);
 
   els.progress.textContent = `${cursor + 1} / ${sequence.length}`;
 }
@@ -229,6 +251,11 @@ function resetAll() {
   fa = null;
   sequence = [];
   cursor = -1;
+
+  directRunningStats = createStats();
+  faRunningStats = createStats();
+
+
   els.directGrid.innerHTML = '';
   els.faGrid.innerHTML = '';
   els.directLog.textContent = '';
@@ -237,6 +264,7 @@ function resetAll() {
   els.faStats.innerHTML = '';
   els.progress.textContent = '0 / 0';
   els.busAddress.textContent = '—';
+
   showErrors([]);
 }
 
@@ -249,5 +277,28 @@ els.viewMode.addEventListener('change', () => {
   els.stepBtn.disabled = disabled;
   els.playBtn.disabled = disabled;
 });
+
+
+const seq = TEST_CASES.sequential.generate(4);
+const mid = TEST_CASES['mid-repeat'].generate(4);
+const rand = TEST_CASES.random.generate();
+
+console.log('Sequential:', seq);
+console.log('Mid-repeat:', mid);
+console.log('Random:', rand);
+
+console.assert(seq.length === 16, 'Sequential length failed');
+console.assert(mid.length === 40, 'Mid-repeat length failed');
+console.assert(rand.length === 64, 'Random length failed');
+
+console.assert(
+  rand.every(
+    value =>
+      Number.isInteger(value) &&
+      value >= 0 &&
+      value <= 1023
+  ),
+  'Random range failed'
+);
 
 resetAll();
