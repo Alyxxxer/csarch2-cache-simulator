@@ -1,25 +1,7 @@
-// ===========================================================================
-// fully-associative-mru.js
-// CSARCH2 Case Study 1 — Machine 8 (Direct Mapped vs Fully Associative + MRU)
-//
-// This module implements ONLY the Fully Associative + MRU engine.
-// Read policy: parameterized — 'non-load-through' OR 'load-through'.
-// Replacement policy: MRU — on a capacity miss, evict the MOST recently
-// used line (not LRU). Verified against the lecture's worked example
-// (sequence 1,7,5,0,2,1,5,6,5,2,2,0 over 4 blocks): this engine's hit/miss
-// pattern and eviction targets match the slide on 11 of 12 accesses; the
-// one mismatch (slide shows a "hit" on the 9th access) contradicts the
-// slide's OWN stated hit rate (4/12) — only a miss on that access adds up
-// to 4 hits total, so that row is treated as a slide/transcription typo,
-// not a bug in this engine.
-
 import { MAIN_MEMORY_BLOCKS, DEFAULT_TIMING, READ_POLICIES, isPowerOfTwo } from './direct-mapped.js';
 
 export { MAIN_MEMORY_BLOCKS, DEFAULT_TIMING, READ_POLICIES, isPowerOfTwo };
 
-/**
- * Validates a config object against the case study specifications.
- */
 export function validateConfig(config = {}) {
   const {
     blockSize,
@@ -49,13 +31,6 @@ export function validateConfig(config = {}) {
   return errors;
 }
 
-/**
- * Address decomposition for Fully Associative mapping.
- * In FA, there are NO index bits. Every block can go into any line.
- *   offset bits = log2(blockSize)
- *   index  bits = 0
- *   tag    bits = log2(mainMemoryBlocks)
- */
 export function addressLayout(config) {
   const { blockSize, mainMemoryBlocks = MAIN_MEMORY_BLOCKS } = config;
   const addressBits = Math.log2(mainMemoryBlocks * blockSize);
@@ -70,10 +45,7 @@ export function addressLayout(config) {
 }
 
 export class FullyAssociativeMRUCache {
-  /**
-   * @param {{blockSize:number, numCacheBlocks:number, mainMemoryBlocks?:number,
-   *          readPolicy?:string, timing?:object}} config
-   */
+
   constructor(config) {
     const errors = validateConfig(config);
     if (errors.length) {
@@ -104,31 +76,21 @@ export class FullyAssociativeMRUCache {
     this.hits = 0;
     this.misses = 0;
     this.totalAccessTime = 0;
-    /** Tracks the index of the Most Recently Used block in the cache array */
     this.mruIndex = null;
     this.steps = [];
   }
 
-  /** Cost of a single miss — formula depends on the given/instance readPolicy. */
   missPenalty(policy = this.readPolicy) {
     const { cacheAccessTime: Tc, memoryAccessTime: Tm, countMissDetection } = this.timing;
     const detect = countMissDetection ? Tc : 0;
 
     if (policy === 'load-through') {
-      // Same reasoning as direct-mapped.js: the CPU only waits on miss
-      // detection + the ONE requested word; the rest of the block streams
-      // in afterward without blocking the CPU.
       return detect + Tm + Tc;
     }
 
     return detect + this.blockSize * Tm + Tc;
   }
 
-  /**
-   * Performs one memory access on the given main-memory BLOCK address.
-   * @param {number} blockAddress 0 .. 1023
-   * @returns {object} Access Step object matching the team's shared contract
-   */
   access(blockAddress) {
     if (!Number.isInteger(blockAddress) ||
         blockAddress < 0 ||
@@ -140,7 +102,6 @@ export class FullyAssociativeMRUCache {
 
     this.totalAccesses += 1;
 
-    // In Fully Associative, tag is simply the block address itself
     const tag = blockAddress;
     let hitIndex = this.lines.findIndex((line) => line.valid && line.tag === tag);
     const hit = hitIndex !== -1;
@@ -157,14 +118,12 @@ export class FullyAssociativeMRUCache {
     } else {
       this.misses += 1;
 
-      // 1. Check if there's an empty line (Compulsory Miss)
       const emptyIndex = this.lines.findIndex((line) => !line.valid);
 
       if (emptyIndex !== -1) {
         missType = 'compulsory';
         targetIndex = emptyIndex;
       } else {
-        // 2. Cache is FULL: Replace the Most Recently Used (MRU) line (Capacity Miss)
         missType = 'capacity';
         targetIndex = this.mruIndex;
         evictedBlock = this.lines[targetIndex].blockAddress;
@@ -177,7 +136,6 @@ export class FullyAssociativeMRUCache {
       accessTimeCycles = this.missPenalty();
     }
 
-    // Update state tracking & MRU marker
     this.lines[targetIndex].lastUsedAtAccess = this.totalAccesses;
     this.mruIndex = targetIndex;
     this.totalAccessTime += accessTimeCycles;
@@ -186,11 +144,11 @@ export class FullyAssociativeMRUCache {
       step: this.totalAccesses,
       blockAddress,
       tag,
-      index: targetIndex, // line where block resides in cache
+      index: targetIndex, 
       hit,
-      missType,                       // null on hit, 'compulsory' or 'capacity' on miss
-      evictedBlock,                   // null when nothing was evicted
-      mruIndex: this.mruIndex,         // useful for the visual UI indicator
+      missType,                       
+      evictedBlock,                   
+      mruIndex: this.mruIndex,         
       accessTimeCycles,
       cacheStateAfter: this.snapshot(),
     };
@@ -199,7 +157,6 @@ export class FullyAssociativeMRUCache {
     return step;
   }
 
-  /** Runs a whole test sequence from a clean cache. */
   run(sequence) {
     this.reset();
     for (const blockAddress of sequence) this.access(blockAddress);
@@ -210,14 +167,13 @@ export class FullyAssociativeMRUCache {
     };
   }
 
-  /** Visual snapshot of cache memory state — one row per cache block. */
   snapshot() {
     return this.lines.map((line, index) => ({
       index,
       valid: line.valid,
       tag: line.tag,
       blockAddress: line.blockAddress,
-      isMRU: index === this.mruIndex, // Explicit flag for frontend visualization
+      isMRU: index === this.mruIndex, 
       words: line.valid
         ? Array.from({ length: this.blockSize }, (_, w) => line.blockAddress * this.blockSize + w)
         : [],
@@ -231,10 +187,6 @@ export class FullyAssociativeMRUCache {
     const { cacheAccessTime: Tc, memoryAccessTime: Tm, countMissDetection } = this.timing;
     const detect = countMissDetection ? Tc : 0;
 
-    // Word-scaled Total Access Time, same convention as direct-mapped.js —
-    // verified against the FA+MRU lecture example (4 hits, 8 misses,
-    // blockSize=2, Tc=1ns, Tm=10ns): 4*2*1 + 8*(2*11 + 1) = 8 + 184 = 192ns,
-    // matching the slide exactly.
     const totalAccessTime =
       this.readPolicy === 'load-through'
         ? this.hits * this.blockSize * Tc + this.misses * this.missPenalty()
@@ -266,7 +218,6 @@ export class FullyAssociativeMRUCache {
   }
 }
 
-/** Formats trace log lines to mirror direct-mapped formatting */
 export function formatLogLine(step) {
   const verdict = step.hit ? 'HIT ' : `MISS(${step.missType})`;
   const evicted = step.evictedBlock === null ? '-' : `blk ${step.evictedBlock}`;
