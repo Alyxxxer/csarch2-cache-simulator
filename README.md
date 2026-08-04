@@ -8,6 +8,10 @@ Ramirez, Diana Angela
 
 ## Deployed Website Link
 https://alyxxxer.github.io/csarch2-cache-simulator/
+
+## Walkthrough
+https://youtu.be/E0qJNxWmSpI
+
 ## Specifications
 The group's Cache Memory Machine intends to simulate how cache memory works with a set of the following common specifications:
 - Parameterized Block Size (min. of 2 words, reco. > 16 words, must be a power of 2)
